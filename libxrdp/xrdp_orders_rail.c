@@ -18,6 +18,7 @@
 
 #include "libxrdp.h"
 #include "xrdp_rail.h"
+#include "xrdp_orders_rail.h" //__RKA__
 
 /* [MS-RDPERP]: Remote Desktop Protocol:
    Remote Programs Virtual Channel Extension

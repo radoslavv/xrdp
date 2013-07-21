@@ -19,7 +19,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#if defined(_WIN32) //__RKA__
+#include <Windows.h> //CreateFile
+#else
 #include <syslog.h>
+#endif //__RKA__
 #include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
@@ -51,7 +55,12 @@ static struct log_config *staticLogConfig = NULL;
 int DEFAULT_CC
 internal_log_file_open(const char *fname)
 {
-    int ret = -1;
+#if defined(_WIN32)
+    return (int)CreateFileA(fname, GENERIC_READ | GENERIC_WRITE,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE,
+                            0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+#else 
+	 int ret = -1;
 
     if (fname != NULL)
     {
@@ -60,6 +69,7 @@ internal_log_file_open(const char *fname)
     }
 
     return ret;
+#endif
 }
 
 /**
@@ -100,6 +110,9 @@ internal_log_xrdp2syslog(const enum logLevels lvl)
 void DEFAULT_CC
 internal_log_lvl2str(const enum logLevels lvl, char *str)
 {
+    #ifdef _MSC_VER //__RKA__
+	 #define snprintf _snprintf
+	 #endif
     switch (lvl)
     {
         case LOG_LEVEL_ALWAYS:
@@ -466,8 +479,10 @@ log_start_from_param(const struct log_config *iniParams)
         staticLogConfig->fd = iniParams->fd;
         staticLogConfig->log_file = g_strdup(iniParams->log_file);
         staticLogConfig->log_level = iniParams->log_level;
+        #ifdef LOG_ENABLE_THREAD //__RKA__
         staticLogConfig->log_lock = iniParams->log_lock;
         staticLogConfig->log_lock_attr = iniParams->log_lock_attr;
+        #endif //__RKA
         staticLogConfig->program_name = g_strdup(iniParams->program_name);
         staticLogConfig->syslog_level = iniParams->syslog_level;
         ret = internal_log_start(staticLogConfig);
@@ -667,3 +682,18 @@ getLogFile(char *replybuf, int bufsize)
 
     return replybuf;
 }
+
+#if defined(_WIN32) //__RKA__
+  //functions not available in windows build
+  //logging into stdout, epty bodies
+  void	closelog(void) {}
+  void	openlog(const char *appname, int logparams, int logtype) {}
+  void	syslog(int lvl, const char *format, ...) {
+    va_list args;
+    char my_log_msg[10240];
+    
+    sprintf(my_log_msg, format, args);
+    fprintf(stdout, "%d: %s\r\n", lvl, my_log_msg);
+  }
+#endif
+

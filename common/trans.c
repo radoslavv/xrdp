@@ -55,7 +55,15 @@ trans_delete(struct trans *self)
     free_stream(self->in_s);
     free_stream(self->out_s);
 
-    if (self->sck > 0)
+    #ifdef _WIN32 //__RKA__, BUG-windows build does not process event on connect                                                                                 
+    if (self->sck_obj > 0)
+    {
+        g_delete_wait_obj_from_socket(self->sck_obj);
+    }
+    self->sck_obj = 0;
+    #endif
+
+	 if (self->sck > 0)
     {
         g_tcp_close(self->sck);
     }
@@ -85,7 +93,8 @@ trans_get_wait_objs(struct trans *self, tbus *objs, int *count)
         return 1;
     }
 
-    objs[*count] = self->sck;
+//__RKA__    objs[*count] = self->sck;
+    objs[*count] = self->sck_obj; //__RKA__, BUG-windows build does not process event on connect
     (*count)++;
     return 0;
 }
@@ -140,6 +149,9 @@ trans_check_wait_objs(struct trans *self)
                     in_trans = trans_create(self->mode, self->in_s->size,
                                             self->out_s->size);
                     in_trans->sck = in_sck;
+                    #ifdef _WIN32 //__RKA__, BUG-windows build does not process event on connect
+                    in_trans->sck_obj = self->sck_obj;
+                    #endif
                     in_trans->type1 = TRANS_TYPE_SERVER;
                     in_trans->status = TRANS_STATUS_UP;
 

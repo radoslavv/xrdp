@@ -153,4 +153,11 @@ int APP_CC      g_time1(void);
 int APP_CC      g_time2(void);
 int APP_CC      g_time3(void);
 
+#if defined(_WIN32) //__RKA__
+  #ifndef mkdtemp
+    #define mkdtemp4win
+    char* APP_CC    mkdtemp(char *template);
+  #endif
+#endif
+
 #endif

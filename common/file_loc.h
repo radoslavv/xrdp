@@ -22,23 +22,43 @@
 #define FILE_LOC_H
 
 #if !defined(XRDP_CFG_PATH)
+#define XRDP_CFG_PATH "C:\\temp\\xrdp"
+#if defined(_WIN32) 
+#else
 #define XRDP_CFG_PATH "/etc/xrdp"
+#endif
 #endif
 
 #if !defined(XRDP_PID_PATH)
+#if defined(_WIN32) 
+#define XRDP_PID_PATH XRDP_CFG_PATH
+#else
 #define XRDP_PID_PATH "/var/run"
+#endif
 #endif
 
 #if !defined(XRDP_SBIN_PATH)
+#if defined(_WIN32) 
+#define XRDP_SBIN_PATH XRDP_PID_PATH
+#else
 #define XRDP_SBIN_PATH "/usr/local/sbin"
+#endif
 #endif
 
 #if !defined(XRDP_SHARE_PATH)
+#if defined(_WIN32) 
+#define XRDP_SHARE_PATH XRDP_PID_PATH
+#else
 #define XRDP_SHARE_PATH "/usr/local/share/xrdp"
+#endif
 #endif
 
 #if !defined(XRDP_LIB_PATH)
+#if defined(_WIN32) 
+#define XRDP_LIB_PATH XRDP_PID_PATH
+#else
 #define XRDP_LIB_PATH "/usr/local/lib/xrdp"
+#endif
 #endif
 
 #endif

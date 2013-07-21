@@ -19,7 +19,13 @@
 #ifndef LOG_H
 #define LOG_H
 
+//__rka__ presun sem
+/* enable threading */
+/*#define LOG_ENABLE_THREAD*/
+
+#ifdef LOG_ENABLE_THREAD //__rka__
 #include <pthread.h>
+#endif //__rka__
 
 #include "arch.h"
 
@@ -54,13 +60,12 @@ enum logReturns
 #define SESMAN_CFG_LOG_ENABLE_SYSLOG "EnableSyslog"
 #define SESMAN_CFG_LOG_SYSLOG_LEVEL  "SyslogLevel"
 
-/* enable threading */
-/*#define LOG_ENABLE_THREAD*/
-
 #ifdef DEBUG
-#define LOG_DBG(args...) log_message(LOG_LEVEL_DEBUG, args);
+//#define LOG_DBG(args...) log_message(LOG_LEVEL_DEBUG, args); //__rka__ 
+#define LOG_DBG(args) log_message(LOG_LEVEL_DEBUG, args); //__rka__
 #else
-#define LOG_DBG(args...)
+//#define LOG_DBG(args...) //__rka__
+#define LOG_DBG(args) //__rka__
 #endif
 
 struct log_config
@@ -71,8 +76,10 @@ struct log_config
   unsigned int log_level;
   int enable_syslog;
   unsigned int syslog_level;
+#ifdef LOG_ENABLE_THREAD //__RKA__
   pthread_mutex_t log_lock;
   pthread_mutexattr_t log_lock_attr;
+#endif //__RKA__
 };
 
 /* internal functions, only used in log.c if this ifdef is defined.*/
@@ -190,4 +197,48 @@ int APP_CC text2bool(char* s);
  * @return
  */
 char *getLogFile(char *replybuf, int bufsize);
+
+#if defined(_WIN32) //__RKA__
+  //windows build workaround for syslog.h
+
+  void	closelog(void);
+  void	openlog(const char *, int, int);
+  void	syslog(int, const char *, ...);
+
+  //if not given by linker
+  #ifndef XRDP_LOG_PATH
+    #define XRDP_LOG_PATH "C:\\TEMP\\xrdp\\"
+  #endif
+  //unix definitions not available in Windows
+  #define O_SYNC 0
+  
+  //__RKA - from syslog.h
+  /*
+   * priorities/facilities are encoded into a single 32-bit quantity, where the
+   * bottom 3 bits are the priority (0-7) and the top 28 bits are the facility
+   * (0-big number).  Both the priorities and the facilities map roughly
+   * one-to-one to strings in the syslogd(8) source code.  This mapping is
+   * included in this file.
+   *
+   * priorities (these are ordered)
+   */
+  #define	LOG_CRIT	2	/* critical conditions */
+  #define	LOG_ERR		3	/* error conditions */
+  #define	LOG_WARNING	4	/* warning conditions */
+  #define	LOG_INFO	6	/* informational */
+  #define	LOG_DEBUG	7	/* debug-level messages */
+
+  /*
+   * Option flags for openlog.
+   *
+   * LOG_ODELAY no longer does anything.
+   * LOG_NDELAY is the inverse of what it used to be.
+   */
+  #define	LOG_PID		0x01	/* log the pid with each message */
+  #define	LOG_CONS	0x02	/* log on the console if errors in sending */
+
+  /* facility codes */
+  #define	LOG_DAEMON	(3<<3)	/* system daemons */
+#endif
+
 #endif

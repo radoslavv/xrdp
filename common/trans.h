@@ -42,6 +42,9 @@ typedef int (*ttrans_conn_in)(struct trans* self, struct trans* new_self);
 struct trans
 {
   tbus sck; /* socket handle */
+#ifdef _WIN32 //__RKA__, BUG-windows build does not process event on connect, need to create event
+  tbus sck_obj; /* socket handle */ //__RKA__
+#endif
   int mode; /* 1 tcp, 2 unix socket */
   int status;
   int type1; /* 1 listener 2 server 3 client */

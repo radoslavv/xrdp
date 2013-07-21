@@ -18,10 +18,15 @@
  * main program
  */
 
+#if defined(HAVE_CONFIG_H) //__RKA__
+#include "config_ac.h"
+#endif 
+
 #if defined(_WIN32)
 #include <windows.h>
 #endif
 #include "xrdp.h"
+#include "log.h"
 
 static struct xrdp_listen *g_listen = 0;
 static long g_threadid = 0; /* main threadid */
@@ -213,6 +218,7 @@ MyServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
     WSADATA w;
     char text[256];
     int pid;
+    struct xrdp_startup_params *startup_params; //__RKA__
     //HANDLE event_han;
     //  int fd;
     //  char text[256];
@@ -222,7 +228,9 @@ MyServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
     //event_han = RegisterEventSource(0, "xrdp");
     //log_event(event_han, "hi xrdp log");
     g_threadid = tc_get_threadid();
-    g_set_current_dir("c:\\temp\\xrdp");
+//    g_set_current_dir("c:\\temp\\xrdp");
+    g_set_current_dir(XRDP_CFG_PATH); //__RKA__
+
     g_listen = 0;
     WSAStartup(2, &w);
     g_sync_mutex = tc_mutex_create();
@@ -252,6 +260,8 @@ MyServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
         //    g_file_write(fd, text, g_strlen(text));
         SetServiceStatus(g_ssh, &g_service_status);
         g_listen = xrdp_listen_create();
+        startup_params = (struct xrdp_startup_params *) g_malloc(sizeof(struct xrdp_startup_params), 1); //__RKA__
+        g_listen->startup_params = startup_params;  //__RKA__
         xrdp_listen_main_loop(g_listen);
         g_sleep(100);
         g_service_status.dwCurrentState = SERVICE_STOPPED;
@@ -266,8 +276,10 @@ MyServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
     xrdp_listen_delete(g_listen);
     tc_mutex_delete(g_sync_mutex);
     tc_mutex_delete(g_sync1_mutex);
-    g_destroy_wait_obj(g_term_event);
-    g_destroy_wait_obj(g_sync_event);
+//__RKA__    g_destroy_wait_obj(g_term_event);
+//__RKA__    g_destroy_wait_obj(g_sync_event);
+    g_delete_wait_obj(g_term_event); //__RKA__, function name correction
+    g_delete_wait_obj(g_sync_event); //__RKA__, function name correction
     WSACleanup();
     //CloseHandle(event_han);
 }
@@ -285,15 +297,47 @@ main(int argc, char **argv)
     SC_HANDLE sc_ser;
     int run_as_service;
     SERVICE_TABLE_ENTRY te[2];
-#else
+//__RKA__ #else //__RKA__, I want to be able to run xrdpwin from console (DEBUGging mainly)
     int pid;
     int fd;
     int no_daemon;
     char text[256];
     char pid_file[256];
+	 struct xrdp_startup_params *startup_params; //__RKA__
+
+	 //__RKA__
+	 enum logReturns error;
+    char cfg_file[256];
 #endif
 
-    g_init();
+//    g_init(); __RKA
+    g_init("xrdp4windows"); //__RKA__, name must be provided
+
+    //__RKA__, missing LOGging initialization
+    g_snprintf(cfg_file, 255, "%s/xrdp.ini", XRDP_CFG_PATH);
+    /* starting logging subsystem */
+    error = log_start(cfg_file, "XRDP");
+
+    if (error != LOG_STARTUP_OK)
+    {
+        switch (error)
+        {
+            case LOG_ERROR_MALLOC:
+                g_writeln("error on malloc. cannot start logging. quitting.");
+                break;
+            case LOG_ERROR_FILE_OPEN:
+                g_writeln("error opening log file [%s]. quitting.",
+                          getLogFile(text, 255));
+                break;
+            default:
+                g_writeln("log_start error");
+                break;
+        }
+
+        g_deinit();
+        g_exit(1);
+    } 
+
     ssl_init();
     /* check compiled endian with actual endian */
     test = 1;
@@ -354,7 +398,8 @@ main(int argc, char **argv)
             g_writeln("   -install: install service");
             g_writeln("   -remove: remove service");
             g_writeln("");
-            g_exit(0);
+//__RKA__            g_exit(0); //__RKA__, I want to see second help
+            run_as_service = 0; //__RKA__, I want to see second help
         }
         else if (g_strncasecmp(argv[1], "-install", 255) == 0 ||
                  g_strncasecmp(argv[1], "--install", 255) == 0 ||
@@ -421,19 +466,21 @@ main(int argc, char **argv)
         }
         else
         {
-            g_writeln("Unknown Parameter");
+/* __RKA__            g_writeln("Unknown Parameter");
             g_writeln("xrdp -h for help");
             g_writeln("");
-            g_exit(0);
+            g_exit(0); //__RKA__, I want to be able to run xrdpwin from console (DEBUGging mainly), but not as service
+*/
+            run_as_service = 0; //__RKA__, I want to be able to run xrdpwin from console (DEBUGging mainly), but not as service
         }
     }
-    else if (argc > 1)
+/* __RKA__    else if (argc > 1)
     {
         g_writeln("Unknown Parameter");
         g_writeln("xrdp -h for help");
         g_writeln("");
-        g_exit(0);
-    }
+        g_exit(0); //__RKA__, I want to be able to run xrdpwin from console (DEBUGging mainly), but not as service
+    } */
 
     if (run_as_service)
     {
@@ -444,8 +491,9 @@ main(int argc, char **argv)
         g_exit(0);
     }
 
-    WSAStartup(2, &w);
-#else /* _WIN32 */
+//__RKA__    WSAStartup(2, &w);
+	 WSAStartup(MAKEWORD(2, 0), &w); //__RKA__, more correct workaround, may be applied Socked version 2.2 later
+//__RKA__ #else /* _WIN32 */ //__RKA__, I want to be able to run xrdpwin from console (DEBUGging mainly), but not as service
     g_snprintf(pid_file, 255, "%s/xrdp.pid", XRDP_PID_PATH);
     no_daemon = 0;
 
@@ -614,9 +662,11 @@ main(int argc, char **argv)
         }
     }
 
-#endif
+//__#__endif //__RKA__, I want to be able to run xrdpwin from console (DEBUGging mainly), but not as service
     g_threadid = tc_get_threadid();
     g_listen = xrdp_listen_create();
+    startup_params = (struct xrdp_startup_params *) g_malloc(sizeof(struct xrdp_startup_params), 1); //__RKA__, BUG uninitialized variable
+    g_listen->startup_params = startup_params;  //__RKA__, BUG uninitialized variable
     g_signal_user_interrupt(xrdp_shutdown); /* SIGINT */
     g_signal_kill(xrdp_shutdown); /* SIGKILL */
     g_signal_pipe(pipe_sig); /* SIGPIPE */
@@ -626,13 +676,16 @@ main(int argc, char **argv)
     pid = g_getpid();
     g_snprintf(text, 255, "xrdp_%8.8x_main_term", pid);
     g_term_event = g_create_wait_obj(text);
-    g_snprintf(text, 255, "xrdp_%8.8x_main_sync", pid);
-    g_sync_event = g_create_wait_obj(text);
-
     if (g_term_event == 0)
     {
         g_writeln("error creating g_term_event");
     }
+    g_snprintf(text, 255, "xrdp_%8.8x_main_sync", pid);
+    g_sync_event = g_create_wait_obj(text);
+    if (g_sync_event == 0) //__RKA__, code cleanup based on xrdp.c
+    {
+        g_writeln("error creating g_sync_event");
+    } 
 
     xrdp_listen_main_loop(g_listen);
     xrdp_listen_delete(g_listen);
@@ -640,6 +693,9 @@ main(int argc, char **argv)
     tc_mutex_delete(g_sync1_mutex);
     g_delete_wait_obj(g_term_event);
     g_delete_wait_obj(g_sync_event);
+    g_free(startup_params); //__RKA__, BUG uninitialized variable
+#endif //__RKA__, I want to be able to run xrdpwin from console (DEBUGging mainly), but not as service
+
 #if defined(_WIN32)
     /* I don't think it ever gets here */
     /* when running in win32 app mode, control c exits right away */
@@ -650,3 +706,23 @@ main(int argc, char **argv)
 #endif
     return 0;
 }
+
+//__RKA__ -> xrdp_listen.c
+/*****************************************************************************/
+/* called in child just after fork */
+int APP_CC
+xrdp_child_fork(void)
+{
+    int pid;
+    char text[256];
+
+    /* close, don't delete these */
+    g_close_wait_obj(g_term_event);
+    g_close_wait_obj(g_sync_event);
+    pid = g_getpid();
+    g_snprintf(text, 255, "xrdp_%8.8x_main_term", pid);
+    g_term_event = g_create_wait_obj(text);
+    g_snprintf(text, 255, "xrdp_%8.8x_main_sync", pid);
+    g_sync_event = g_create_wait_obj(text);
+    return 0;
+} 

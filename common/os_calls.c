@@ -24,8 +24,8 @@
 #include "config_ac.h"
 #endif
 #if defined(_WIN32)
-#include <windows.h>
-#include <winsock.h>
+#include <winsock2.h>
+#include <io.h> //mktemp() //__RKA__
 #else
 /* fix for solaris 10 with gcc 3.3.2 problem */
 #if defined(sun) || defined(__sun)
@@ -64,6 +64,119 @@
 
 /* for clearenv() */
 #if defined(_WIN32)
+#ifdef mkdtemp4win //__RKA__
+char* APP_CC
+mkdtemp(char *template)
+{
+        if ((mktemp(template)==NULL) || mkdir(template, 0700))
+                return NULL;
+        return template;
+}
+
+// https://github.com/dinhviethoa/libetpan/blob/master/src/windows/inet_aton.c
+/*
+ * Check whether "cp" is a valid ascii representation
+ * of an Internet address and convert to a binary address.
+ * Returns 1 if the address is valid, 0 if not.
+ * This replaces inet_addr, the return value from which
+ * cannot distinguish between failure and a local broadcast address.
+ */
+int
+inet_aton(cp_arg, addr)
+	const char *cp_arg;
+	struct in_addr *addr;
+{
+	register const u_char *cp = cp_arg;
+	register u_long val;
+	register int base;
+#ifdef WIN32
+	register ULONG_PTR n;
+#else
+	register unsigned long n;
+#endif
+	register u_char c;
+	u_int parts[4];
+	register u_int *pp = parts;
+
+	for (;;) {
+		/*
+		 * Collect number up to ``.''.
+		 * Values are specified as for C:
+		 * 0x=hex, 0=octal, other=decimal.
+		 */
+		val = 0; base = 10;
+		if (*cp == '0') {
+			if (*++cp == 'x' || *cp == 'X')
+				base = 16, cp++;
+			else
+				base = 8;
+		}
+		while ((c = *cp) != '\0') {
+			if (isascii(c) && isdigit(c)) {
+				val = (val * base) + (c - '0');
+				cp++;
+				continue;
+			}
+			if (base == 16 && isascii(c) && isxdigit(c)) {
+				val = (val << 4) +
+					(c + 10 - (islower(c) ? 'a' : 'A'));
+				cp++;
+				continue;
+			}
+			break;
+		}
+		if (*cp == '.') {
+			/*
+			 * Internet format:
+			 *	a.b.c.d
+			 *	a.b.c	(with c treated as 16-bits)
+			 *	a.b	(with b treated as 24 bits)
+			 */
+			if (pp >= parts + 3 || val > 0xff)
+				return (0);
+			*pp++ = val, cp++;
+		} else
+			break;
+	}
+	/*
+	 * Check for trailing characters.
+	 */
+	if (*cp && (!isascii(*cp) || !isspace(*cp)))
+		return (0);
+	/*
+	 * Concoct the address according to
+	 * the number of parts specified.
+	 */
+	n = pp - parts + 1;
+	switch (n) {
+
+	case 1:				/* a -- 32 bits */
+		break;
+
+	case 2:				/* a.b -- 8.24 bits */
+		if (val > 0xffffff)
+			return (0);
+		val |= parts[0] << 24;
+		break;
+
+	case 3:				/* a.b.c -- 8.8.16 bits */
+		if (val > 0xffff)
+			return (0);
+		val |= (parts[0] << 24) | (parts[1] << 16);
+		break;
+
+	case 4:				/* a.b.c.d -- 8.8.8.8 bits */
+		if (val > 0xff)
+			return (0);
+		val |= (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8);
+		break;
+	}
+	if (addr)
+		addr->s_addr = htonl(val);
+	return (1);
+}
+
+#endif //__RKA__
 #else
 extern char **environ;
 #endif
@@ -104,25 +217,40 @@ g_rm_temp_dir(void)
 int APP_CC
 g_mk_temp_dir(const char *app_name)
 {
+#if defined(_WIN32) //__RKA__
+#define G_MK_APP_DIR "C:\\temp\\xrdp"
+#define G_MK_APP_DIR2 G_MK_APP_DIR "\\"
+#ifdef _MSC_VER
+#define snprintf _snprintf
+#endif
+#else
+#define G_MK_APP_DIR "/tmp/.xrdp"
+#define G_MK_APP_DIR2 G_MK_APP_DIR "/"
+#endif
     if (app_name != 0)
     {
         if (app_name[0] != 0)
         {
-            if (!g_directory_exist("/tmp/.xrdp"))
+//__RKA            if (!g_directory_exist("/tmp/.xrdp"))
+            if (!g_directory_exist(G_MK_APP_DIR))
             {
-                if (!g_create_dir("/tmp/.xrdp"))
+//__RKA                if (!g_create_dir("/tmp/.xrdp"))
+                if (!g_create_dir(G_MK_APP_DIR))
                 {
                     printf("g_mk_temp_dir: g_create_dir failed\n");
                     return 1;
                 }
 
+//__RKA                g_chmod_hex("/tmp/.xrdp", 0x1777);
                 g_chmod_hex("/tmp/.xrdp", 0x1777);
             }
 
             snprintf(g_temp_base, sizeof(g_temp_base),
-                     "/tmp/.xrdp/%s-XXXXXX", app_name);
+                     G_MK_APP_DIR2 "%s-XXXXXX", app_name);
+//__RKA                     "/tmp/.xrdp/%s-XXXXXX", app_name);
             snprintf(g_temp_base_org, sizeof(g_temp_base_org),
-                     "/tmp/.xrdp/%s-XXXXXX", app_name);
+                     G_MK_APP_DIR2 "%s-XXXXXX", app_name);
+//__RKA                     "/tmp/.xrdp/%s-XXXXXX", app_name);
 
             if (mkdtemp(g_temp_base) == 0)
             {
@@ -507,8 +635,6 @@ g_tcp_local_socket(void)
 void APP_CC
 g_tcp_close(int sck)
 {
-    char ip[256];
-
     if (sck == 0)
     {
         return;
@@ -516,6 +642,7 @@ g_tcp_close(int sck)
 #if defined(_WIN32)
     closesocket(sck);
 #else
+    char ip[256]; //__RKA, just moved here - code cleanup
     g_write_ip_address(sck, ip, 255);
     log_message(LOG_LEVEL_INFO, "An established connection closed to "
                 "endpoint: %s", ip);
@@ -1076,7 +1203,8 @@ g_create_wait_obj(char *name)
 #ifdef _WIN32
     tbus obj;
 
-    obj = (tbus)CreateEvent(0, 1, 0, name);
+    //obj = (tbus)CreateEvent(0, 1, 0, name);
+    obj = (tbus)CreateEvent(NULL, TRUE, FALSE, name);
     return obj;
 #else
     tbus obj;
@@ -1165,7 +1293,8 @@ g_create_wait_obj_from_socket(tbus socket, int write)
     g_memset(&event, 0, sizeof(WSAEVENT));
 
     event = WSACreateEvent();
-    lnetevent = (write ? FD_WRITE : FD_READ) | FD_CLOSE;
+//__RKA__    lnetevent = (write ? FD_WRITE : FD_READ) | FD_CLOSE;
+    lnetevent = (write ? FD_WRITE : FD_READ) | FD_CLOSE | (write ? 0 : FD_ACCEPT);
 
     if (WSAEventSelect(socket, event, lnetevent) == 0)
     {
@@ -1743,7 +1872,11 @@ g_chmod_hex(const char *filename, int flags)
 int APP_CC
 g_chown(const char *name, int uid, int gid)
 {
+#if defined(_WIN32) //__RKA
+    return 0;       //__RKA
+#else               //__RKA
     return chown(name, uid, gid);
+#endif              //__RKA
 }
 
 /*****************************************************************************/
@@ -1806,7 +1939,9 @@ int APP_CC
 g_file_exist(const char *filename)
 {
 #if defined(_WIN32)
-    return 0; // use FileAge(filename) <> -1
+	 if (g_file_get_size(filename) != -1) return 1;
+	 else return 0;
+//__RKA__    return 0; // use FileAge(filename) <> -1
 #else
     return access(filename, F_OK) == 0;
 #endif
@@ -1818,8 +1953,17 @@ int APP_CC
 g_directory_exist(const char *dirname)
 {
 #if defined(_WIN32)
-    return 0; // use GetFileAttributes and check return value
+//__RKA    return 0; // use GetFileAttributes and check return value
     // is not -1 and FILE_ATTRIBUT_DIRECTORY bit is set
+    if (GetFileAttributes(dirname) == FILE_ATTRIBUTE_DIRECTORY)
+    {
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }  
+
 #else
     struct stat st;
 
@@ -1920,7 +2064,14 @@ int APP_CC
 g_file_get_size(const char *filename)
 {
 #if defined(_WIN32)
-    return -1;
+    //__RKA__
+	 WIN32_FILE_ATTRIBUTE_DATA sFileInformation;
+
+	 if (GetFileAttributesEx(filename, GetFileExInfoStandard, &sFileInformation) != 0) {
+		  return (((__int64)sFileInformation.nFileSizeHigh << 32) + sFileInformation.nFileSizeLow);
+	 }
+	 else return -1;
+    //__RKA__ return -1;
 #else
     struct stat st;
 

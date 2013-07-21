@@ -94,7 +94,8 @@ tbus APP_CC
 tc_mutex_create(void)
 {
 #if defined(_WIN32)
-    return (tbus)CreateMutex(0, 0, 0);
+//    return (tbus)CreateMutex(0, 0, 0);
+    return (tbus)CreateMutex(NULL, TRUE, "xrdp_mutex");
 #else
     pthread_mutex_t *lmutex;
 
@@ -157,7 +158,8 @@ tc_sem_create(int init_count)
 #if defined(_WIN32)
     HANDLE sem;
 
-    sem = CreateSemaphore(0, init_count, init_count + 10, 0);
+//    sem = CreateSemaphore(0, init_count, init_count + 10, 0);
+    sem = CreateSemaphore(NULL, init_count, init_count + 10, "xrd_semaphore");
     return (tbus)sem;
 #else
     sem_t *sem = (sem_t *)NULL;

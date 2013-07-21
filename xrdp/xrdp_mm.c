@@ -18,7 +18,9 @@
  * module manager
  */
 
-#include <config_ac.h>
+#if defined(HAVE_CONFIG_H) //__RKA__
+#include "config_ac.h"
+#endif
 #define ACCESS
 #include "xrdp.h"
 #include "log.h"
@@ -804,7 +806,8 @@ xrdp_mm_connect_chansrv(struct xrdp_mm *self, char *ip, char *port)
         self->chan_trans = trans_create(TRANS_MODE_TCP, 8192, 8192);
     }
 
-    self->chan_trans->trans_data_in = xrdp_mm_chan_data_in;
+//__RKA__    self->chan_trans->trans_data_in = xrdp_mm_chan_data_in;
+    self->chan_trans->trans_data_in = (ttrans_data_in *) xrdp_mm_chan_data_in; //__RKA__, Visual Studio compiler workaround
     self->chan_trans->header_size = 8;
     self->chan_trans->callback_data = self;
 
@@ -1490,7 +1493,8 @@ xrdp_mm_connect(struct xrdp_mm *self)
         g_snprintf(text, 255, "connecting to sesman ip %s port %s", ip, port);
         xrdp_wm_log_msg(self->wm, text);
         /* xrdp_mm_sesman_data_in is the callback that is called when data arrives */
-        self->sesman_trans->trans_data_in = xrdp_mm_sesman_data_in;
+//__RKA__        self->sesman_trans->trans_data_in = xrdp_mm_sesman_data_in;
+        self->sesman_trans->trans_data_in = (ttrans_data_in *) xrdp_mm_sesman_data_in; //__RKA__, Visual Studio compiler workaround
         self->sesman_trans->header_size = 8;
         self->sesman_trans->callback_data = self;
 
